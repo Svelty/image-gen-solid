@@ -24,7 +24,21 @@ const generateRandomBigInt = (min: bigint, max: bigint) => {
 
 const ImageGen: Component<{}> = (props) => {
 
-    const [imageGenResponse, setImageGenResponse] = createSignal({"updateType": "none", "percentage": 0, "title": "Awaiting input"})
+    type ResponseItem = {
+        title?: string,
+        updateType: string,
+        percentage?: string,
+        image?: number[][][],
+        product?: number[][][]
+    }
+
+    enum Performance {
+        QUALITY = "Quality",
+        SPEED = "Speed",
+        EXTREME_SPEED = "Extreme Speed"
+    }
+
+    const [imageGenResponse, setImageGenResponse] = createSignal<ResponseItem>({"updateType": "none", "percentage": "0", "title": "Awaiting input"})
     const [imagePreview, setImagePreview] = createSignal("")
     const [images, setImages] = createSignal([""])
 
@@ -33,17 +47,7 @@ const ImageGen: Component<{}> = (props) => {
     const [isRandomSeed, setIsRandomSeed] = createSignal(true)
     const [seed, setSeed] = createSignal(generateRandomBigInt(MIN_SEED, MAX_SEED).toString())
     const [numberOfImages, setNumberOfImages] = createSignal(2)
-
-
-    type ResponseItem = {
-        data: {
-            title: string,
-            updateType: string,
-            percentage: string,
-            image: number[],
-            product: number[][]
-        }
-    }
+    const [isEnablePreviewImages, setIsEnablePreviewImages] = createSignal(false)
 
 
     const getCanvasDataUrl = (rgbArray: number[][][]) => {
@@ -77,24 +81,56 @@ const ImageGen: Component<{}> = (props) => {
         return ""
     }
 
-    enum Performance {
-        QUALITY = "Quality",
-        SPEED = "Speed",
-        EXTREME_SPEED = "Extreme Speed"
+    const handleImageGenResponseJson = (json: ResponseItem) => {
+        try {
+                        
+            if (json.updateType === 'init') {
+                setImageGenResponse(json);
+            } else if (json.updateType === 'preview') {
+                setImageGenResponse(json);
+                if (json.image) {
+                    try {
+                        console.log("set image preview for json: ", json)
+                        const imageUrl = getCanvasDataUrl(json.image)
+                        setImagePreview(imageUrl)
+                    } catch (e) {
+                        console.log("Error displaying image: ", e)
+                    }
+                }
+            } else if (json.updateType === 'results') {
+                if (json.product) {
+                    try {
+                        console.log("set images for json: ", json)
+                        const imageUrl = getCanvasDataUrl(json.product)
+                        setImages(images => [ ...images, imageUrl])
+                    } catch (e) {
+                        console.log("Error displaying image: ", e)
+                    }
+                }
+            } else if (json.updateType == 'finished') {
+                setImageGenResponse(json);
+            } else {
+                console.log("------ THIS IS UNEXPECTED --------")
+            }
+        } catch (e) {
+            console.log("Wheres the error: ", e)
+        }
     }
     
-    const  genImage = async ({ 
+    const genImage = async ({ 
         prompt,
         negativePrompt,
         seed,
         performance,
-        numberOfImages
+        numberOfImages,
+        isEnablePreviewImages
     }: {
         prompt: string,
         negativePrompt: string,
         seed: string, //TODO: validate that seed is a bigint
         performance: Performance,
-        numberOfImages: number
+        numberOfImages: number,
+        isEnablePreviewImages: boolean
     }) => {
         try {
             console.log(prompt)
@@ -106,7 +142,8 @@ const ImageGen: Component<{}> = (props) => {
                 imageNumber: numberOfImages, 
                 performanceSelection: performance,
                 styleSelections:["Fooocus V2", "Fooocus Masterpiece", "SAI Anime"], 
-                aspectRatiosSelection:"1152×896" 
+                aspectRatiosSelection:"1152×896",
+                enablePreviewImages: isEnablePreviewImages
             }
             const response = await fetch(
                 `http://localhost:5000/image/gen`, ///image/gen
@@ -121,6 +158,7 @@ const ImageGen: Component<{}> = (props) => {
 
             //reset images array
             setImages([])
+            setImagePreview("")
 
             // Ensure the server is sending a stream
             if (!response.body) {
@@ -139,95 +177,43 @@ const ImageGen: Component<{}> = (props) => {
                 }
 
                 buffer += new TextDecoder().decode(value);
-                
 
                 try {
                     // Check if the buffer contains a complete JSON object
                     const json = JSON.parse(buffer);
 
-                    try {
-                        setImageGenResponse(json);
-                        if (json.image) {
-                            try {
-                                console.log("set image preview for json: ", json)
-                                const imageUrl = getCanvasDataUrl(json.image)
-                                setImagePreview(imageUrl)
-                            } catch (e) {
-                                console.log("Error displaying image: ", e)
-                            }
-                        } else if (json.product) {
-                            try {
-                                console.log("set images for json: ", json)
-                                if (json.updateType == 'finished') {
-                                    console.log("This is a finished response")
-                                    setImages([])//TODO: this could be handled better (maybe by index)
-                                    for (let product of json.product) {
-                                        const imageUrl = getCanvasDataUrl(product)
-                                        setImages(images => [ ...images, imageUrl])
-                                    }
-                                } else {
-                                    console.log("This is a result response")
-                                    setImages([])
-                                    for (let product of json.product) {
-                                        const imageUrl = getCanvasDataUrl(product)
-                                        setImages(images => [ ...images, imageUrl])
-                                    }
-                                }
-                                
-                            } catch (e) {
-                                console.log("Error displaying image: ", e)
-                            }
-                        } else {
-                            console.log("------ THIS IS UNEXPECTED --------")
-                        }
-                    } catch (e) {
-                        console.log("Wheres the error: ", e)
-                    }
-                    // console.log('Received JSON:', json);
-                    
+                    handleImageGenResponseJson(json)
 
                     // Reset the buffer for the next message
                     buffer = '';
-                    // skip = false
                 } catch (e) {
                     // The JSON is not complete, so wait for more chunks
                     if (e instanceof Error) {
-                        console.log("Incomplete JSON, waiting for more data...");
+                        console.log("Incomplete JSON, waiting for more data...", e);
                         try {
-                            const match = e.message.match(/\d+/); // Regular expression to match a sequence of digits
+                            if (buffer.includes("\n\n")) {
 
-                            if (match) {
-                                const number = parseInt(match[0], 10); // Convert the matched string to a number
-                                // console.log("Number: ", number); // Outputs: 862425
-                                // console.log(buffer[number])
-                                console.log(buffer.substring(number - 7, number + 7))
-                                // console.log(buffer.substring(number - 7, number -1))
-                                // console.log(buffer.substring(number, number + 7))
-                                const firstPart = ']]]}'
-                                const secondPart = '{"updat'
+                                const splitBuffer = buffer.split("\n\n")
 
-                                if (buffer.substring(number - 6, number -2) === firstPart) {
-                                    // console.log("LETS FIX THIS STRING :/")
-                                    if (buffer.substring(number, number + 7) === secondPart) {
-                                        console.log(" SECOND LETS FIX THIS STRING :/")
-                                        buffer = buffer.substring(number)
+                                const end = splitBuffer.pop()
+                                buffer = end ? end : ''
+
+                                splitBuffer.forEach(el => {
+                                    try {
+                                        const json = JSON.parse(el);
+                                        handleImageGenResponseJson(json)
+                                    } catch (e) {
+                                        console.log("could not process: ", el)
+                                        console.log("error: ", e)
                                     }
-                                }
-                                
-                                // console.log("Attempting to insert comma")
-                                // buffer = buffer.slice(0, number) + "," + buffer.slice(number);
-                            } 
+                                })
+                            }
                         } catch (nestedError) {
                             console.log("NESTED ERROR: ", nestedError)
                         }
-                        
                     } else {
                         console.log("************************Unexpected error type********************")
                     }
-                    
-                    
-                    console.log("First 10: ", buffer.substring(0, 10))
-                    console.log("Last 10: ", buffer.slice(-10))
                 }
             }
             return true
@@ -237,18 +223,12 @@ const ImageGen: Component<{}> = (props) => {
         } 
     }
 
-    
-
-      
-
-
   
   return <div>
     <div>{imageGenResponse().percentage}</div>
     <div>{imageGenResponse().updateType}</div>
     <div>{imageGenResponse().title}</div>
     <img src={imagePreview()} alt="Preview" />
-    {/* <img src={image()} alt="Final Image" /> */}
     {images().map((imageUrl, index) => (
         <img src={imageUrl} alt={`Image ${index}`} />
     ))}
@@ -260,7 +240,8 @@ const ImageGen: Component<{}> = (props) => {
                 negativePrompt: negativePrompt(),
                 seed: seed(),
                 performance: Performance.SPEED,
-                numberOfImages: numberOfImages()
+                numberOfImages: numberOfImages(),
+                isEnablePreviewImages: isEnablePreviewImages()
             });
             if (isSuccess && isRandomSeed()) {
                 setSeed(generateRandomBigInt(MIN_SEED, MAX_SEED).toString())
@@ -330,6 +311,19 @@ const ImageGen: Component<{}> = (props) => {
                 }}
             />
         </div>
+        <div>
+            <span>
+                Enable Preview Images:
+            </span>
+            <input 
+                type="checkbox" 
+                id="is-enable-preview-images" 
+                checked={isEnablePreviewImages()}
+                onChange={(e) => {
+                    setIsEnablePreviewImages(e.target.checked)
+                }}
+            />
+        </div>
         
         <button 
             type="submit"
@@ -338,15 +332,6 @@ const ImageGen: Component<{}> = (props) => {
         </button>
     </form>
     
-    {/* <Button 
-        onClick={(e) => {
-            e.preventDefault()
-            console.log("Hello Button")
-            genImage2(prompt())
-            // setBody(input())
-        }}>
-        get single image
-    </Button> */}
   </div>;
 };
 
