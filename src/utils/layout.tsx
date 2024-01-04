@@ -1,19 +1,28 @@
 import { createSignal, onCleanup, onMount } from "solid-js";
 
-export const useElementWidth =(): [() => number, (el: HTMLElement) => void]  => {
-    const [width, setWidth] = createSignal(0);
-    let elementRef: HTMLElement;
+export const useElementWidth = (): [
+  () => number,
+  (el: HTMLElement) => void,
+] => {
+  const [width, setWidth] = createSignal(0);
+  let elementRef: HTMLElement;
 
-    const updateWidth = () => setWidth(elementRef.offsetWidth);
+  const updateWidth = () => setWidth(elementRef.offsetWidth);
 
-    onMount(() => {
-        window.addEventListener('resize', updateWidth);
-        updateWidth(); // Initialize width
-    });
+  onMount(() => {
+    window.addEventListener("resize", updateWidth);
+    updateWidth(); // Initialize width
+  });
 
-    onCleanup(() => {
-        window.removeEventListener('resize', updateWidth);
-    });
+  onCleanup(() => {
+    window.removeEventListener("resize", updateWidth);
+  });
 
-    return [() => width(), (el: HTMLElement) => { elementRef = el; updateWidth() }];
-}
+  return [
+    () => width(),
+    (el: HTMLElement) => {
+      elementRef = el;
+      updateWidth();
+    },
+  ];
+};

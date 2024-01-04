@@ -4,12 +4,9 @@ module.exports = {
   theme: {
     extend: {
       spacing: {
-        '41': '162px'
-      }
+        41: "162px",
+      },
     },
   },
-  plugins: [
-    require('tailwind-scrollbar'),
-  ],
-}
-
+  plugins: [require("tailwind-scrollbar")],
+};
