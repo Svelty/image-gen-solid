@@ -5,6 +5,8 @@ import Select from "./components/Select";
 import Option from "./components/Option";
 import Input from "./components/Input";
 import CheckBox from "./components/CheckBox";
+import DropdownSelect from "./components/ark/DropdownSelect";
+import { useElementWidth } from "./utils/layout";
 
 //TODO: get these from server
 const MIN_SEED = BigInt(0);
@@ -395,23 +397,23 @@ const ImageGen: Component<{}> = (props) => {
         return measures.length > 0 ? totalDuration / measures.length : 0;
     }
 
-    const useElementWidth =(): [() => number, (el: HTMLElement) => void]  => {
-        const [width, setWidth] = createSignal(0);
-        let elementRef: HTMLElement;
+    // const useElementWidth =(): [() => number, (el: HTMLElement) => void]  => {
+    //     const [width, setWidth] = createSignal(0);
+    //     let elementRef: HTMLElement;
     
-        const updateWidth = () => setWidth(elementRef.offsetWidth);
+    //     const updateWidth = () => setWidth(elementRef.offsetWidth);
     
-        onMount(() => {
-            window.addEventListener('resize', updateWidth);
-            updateWidth(); // Initialize width
-        });
+    //     onMount(() => {
+    //         window.addEventListener('resize', updateWidth);
+    //         updateWidth(); // Initialize width
+    //     });
     
-        onCleanup(() => {
-            window.removeEventListener('resize', updateWidth);
-        });
+    //     onCleanup(() => {
+    //         window.removeEventListener('resize', updateWidth);
+    //     });
     
-        return [() => width(), (el: HTMLElement) => { elementRef = el; }];
-    }
+    //     return [() => width(), (el: HTMLElement) => { elementRef = el; }];
+    // }
 
     const [getParentWidth, parentRef] = useElementWidth();
 
@@ -448,10 +450,16 @@ const ImageGen: Component<{}> = (props) => {
                             <label for="refiner-model-dropdown">Choose a refiner:</label>
                             <Select id="refiner-model-dropdown" value={refinerModel()} onChange={(e) => setRefinerModel(e.target.value)}>
                                 <Option value={"None"}>None</Option>
-                                {models().map((model: string) => {
-                                    return <Option value={model}>{model}</Option>
-                                })}
+                                {}
                             </Select>
+                            <DropdownSelect 
+                                options={[ {value: "None", label: "None"}, ...models().map((model: string) => {
+                                    return { value: model, label: model}
+                                })]}
+                                onChange={(e) => console.log(e)}
+                                label="Choose a refiner model:"
+                                defaultSelected={refinerModel()}
+                            />
                         </>)
                     }
                 </div>
@@ -566,12 +574,21 @@ const ImageGen: Component<{}> = (props) => {
                     {aspectRatios.loading 
                         ? (<span> AVAILABLE ASPECT RATIOS LOADING </span>) 
                         : (<>
-                            <label for="size-dropdown">Choose a size:</label>
+                            {/* <label for="size-dropdown">Choose a size:</label>
                             <Select id="size-dropdown" value={size()} onChange={(e) => setSize(e.target.value)}>
                                 {aspectRatios().map((ratio: { dimensions: string, ratio: string}) => {
                                     return <Option value={ratio.dimensions}>{ratio.dimensions + " " + ratio.ratio}</Option>
                                 })}
-                            </Select>
+                            </Select> */}
+                            {/* TODO: onFocus, scrollbar, border */}
+                            <DropdownSelect 
+                                options={aspectRatios().map((ratio: { dimensions: string, ratio: string}) => {
+                                    return { value:ratio.dimensions, label:ratio.dimensions + " " + ratio.ratio }
+                                })}
+                                onChange={(e) => setSize(e[0].value)}
+                                label="Choose a size:"
+                                defaultSelected={size()}
+                            />
                         </>)
                     }
                 </div>
