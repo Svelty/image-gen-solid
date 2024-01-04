@@ -15,5 +15,5 @@ export const useElementWidth =(): [() => number, (el: HTMLElement) => void]  => 
         window.removeEventListener('resize', updateWidth);
     });
 
-    return [() => width(), (el: HTMLElement) => { elementRef = el; }];
+    return [() => width(), (el: HTMLElement) => { elementRef = el; updateWidth() }];
 }

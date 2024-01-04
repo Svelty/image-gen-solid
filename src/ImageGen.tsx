@@ -397,66 +397,43 @@ const ImageGen: Component<{}> = (props) => {
         return measures.length > 0 ? totalDuration / measures.length : 0;
     }
 
-    // const useElementWidth =(): [() => number, (el: HTMLElement) => void]  => {
-    //     const [width, setWidth] = createSignal(0);
-    //     let elementRef: HTMLElement;
-    
-    //     const updateWidth = () => setWidth(elementRef.offsetWidth);
-    
-    //     onMount(() => {
-    //         window.addEventListener('resize', updateWidth);
-    //         updateWidth(); // Initialize width
-    //     });
-    
-    //     onCleanup(() => {
-    //         window.removeEventListener('resize', updateWidth);
-    //     });
-    
-    //     return [() => width(), (el: HTMLElement) => { elementRef = el; }];
-    // }
-
-    const [getParentWidth, parentRef] = useElementWidth();
+    const [getPromptBarWidth, promptBarRef] = useElementWidth();
 
   
   return (
     <div>
         <div class="flex h-screen">
             {/* <div class="flex-auto w-64 p-2 overflow-auto"> */}
-            <div class="fixed top-6 left-0 w-64 p-2 overflow-auto scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-zinc-600" style={{ height: 'calc(100vh - 24px)' }}>
+            <div class="fixed top-6 left-0 w-64 p-2 border-t border-r rounded border-zinc-800 overflow-auto scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-zinc-600" style={{ height: 'calc(100vh - 24px)' }}>
+                <div class="flex flex-grow justify-center">
+                    Model Config
+                </div>
                 <div>
-                    <span>
-                        Model:
-                    </span>
+                    
                     {models.loading 
                         ? (<span> MODELS LOADING </span>) 
                         : (<>
-                            <label for="model-dropdown">Choose an model:</label>
-                            <Select id="model-dropdown" value={model()} onChange={(e) => setModel(e.target.value)}>
-                                {models().map((model: string) => {
-                                    return <Option value={model}>{model}</Option>
-                                })}
-                            </Select>
+                            <DropdownSelect 
+                                options={[ {value: "None", label: "None"}, ...models().map((model: string) => {
+                                    return { value: model, label: model}
+                                })]}
+                                onChange={(e) => setModel(e[0].value)}
+                                label="Choose a model:"
+                                defaultSelected={model()}
+                            />
                         </>)
                     }
                     
                 </div>
                 <div>
-                    <span>
-                        Model:
-                    </span>
                     {models.loading 
                         ? (<span> MODELS LOADING </span>) 
                         : (<>
-                            <label for="refiner-model-dropdown">Choose a refiner:</label>
-                            <Select id="refiner-model-dropdown" value={refinerModel()} onChange={(e) => setRefinerModel(e.target.value)}>
-                                <Option value={"None"}>None</Option>
-                                {}
-                            </Select>
                             <DropdownSelect 
                                 options={[ {value: "None", label: "None"}, ...models().map((model: string) => {
                                     return { value: model, label: model}
                                 })]}
-                                onChange={(e) => console.log(e)}
+                                onChange={(e) => setRefinerModel(e[0].value)}
                                 label="Choose a refiner model:"
                                 defaultSelected={refinerModel()}
                             />
@@ -574,13 +551,7 @@ const ImageGen: Component<{}> = (props) => {
                     {aspectRatios.loading 
                         ? (<span> AVAILABLE ASPECT RATIOS LOADING </span>) 
                         : (<>
-                            {/* <label for="size-dropdown">Choose a size:</label>
-                            <Select id="size-dropdown" value={size()} onChange={(e) => setSize(e.target.value)}>
-                                {aspectRatios().map((ratio: { dimensions: string, ratio: string}) => {
-                                    return <Option value={ratio.dimensions}>{ratio.dimensions + " " + ratio.ratio}</Option>
-                                })}
-                            </Select> */}
-                            {/* TODO: onFocus, scrollbar, border */}
+                            {/* TODO: onFocus */}
                             <DropdownSelect 
                                 options={aspectRatios().map((ratio: { dimensions: string, ratio: string}) => {
                                     return { value:ratio.dimensions, label:ratio.dimensions + " " + ratio.ratio }
@@ -604,25 +575,18 @@ const ImageGen: Component<{}> = (props) => {
                         : (<>
                             <For each={selectedLoras()}>{(item, index) => {
                                 return (<div>
-                                    <label for="lora-dropdown">Lora {index() + 1}:</label>
-                                    <Select 
-                                        class="mb-1"
-                                        id="lora-model-dropdown" 
-                                        value={item.model} 
-                                        //@ts-ignore TODO:
+                                    <DropdownSelect 
+                                        options={[{ value: "None", label:" None"}, ...loras().map((lora: string) => {
+                                            return { value: lora, label: lora}
+                                        })]}
                                         onChange={(e) => setSelectedLoras(selected => {
-                                            selected[index()] = { model: e.target.value, weight: selected[index()].weight }
+                                            selected[index()] = { model: e[0].value, weight: selected[index()].weight }
                                             return selected
-                                        })
-                                    }>
-                                        <Option value={"None"}>None</Option>
-                                        {loras().map((lora: string) => {
-                                            return (<>
-                                                <Option value={lora}>{lora}</Option>
-                                                
-                                            </>)
                                         })}
-                                    </Select>
+                                        label={`Lora ${index() + 1}:`}
+                                        defaultSelected={item.model}
+                                        class="mb-1"
+                                    />
                                     <Input
                                         value={item.weight}
                                         onChange={(e) => {
@@ -683,8 +647,8 @@ const ImageGen: Component<{}> = (props) => {
             </div>
                 
 
-            <div ref={parentRef} class="ml-64 flex-auto relative">
-                <div class="fixed top-0 right-0 bg-zinc-700 z-10" style={{ width: `${getParentWidth()}px` }}>
+            <div ref={promptBarRef} class="ml-64 flex-auto relative">
+                <div class="fixed top-0 right-0 bg-zinc-700 z-10" style={{ width: `${getPromptBarWidth()}px` }}>
                     <div class="flex p-1 mt-2">
                         <div class="w-2/5 m-1 mb-0">
                             <span>
