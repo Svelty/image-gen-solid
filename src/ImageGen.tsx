@@ -41,14 +41,26 @@ const generateRandomBigInt = (min: bigint, max: bigint) => {
   return min + randomNumber;
 };
 
+//notes on solid:
+//destructuring props will cause them to lose reactivity
+//onChange for inputs only fires after making a complete change, onInput will fire every keystroke
+//use For or Index components to loop in templates, do not use map
+
 const ImageGen: Component<{}> = (props) => {
   type ResponseItem = {
     title?: string;
     updateType: string;
     percentage?: string;
-    image?: number[][][];
-    product?: number[][][];
-    products?: number[][][][];
+    imageData?: {
+      imageUrl: string;
+      height: number;
+      width: number;
+    };
+    imagesData?: {
+      imageUrl: string;
+      height: number;
+      width: number;
+    }[];
   };
 
   type Image = {
@@ -158,94 +170,64 @@ const ImageGen: Component<{}> = (props) => {
     }
   });
 
-  //TODO: investigate how much of this could be done server side
-  const getCanvasDataUrl = (rgbArray: number[][][]) => {
-    const height = rgbArray.length;
-    const width = rgbArray[0].length;
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d");
-    canvas.width = width;
-    canvas.height = height;
-    let imageData = ctx?.createImageData(width, height);
-    let data = imageData?.data;
-
-    if (data) {
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          const pos = (y * width + x) * 4;
-          const rgb = rgbArray[y][x];
-          data[pos] = rgb[0]; // Red
-          data[pos + 1] = rgb[1]; // Green
-          data[pos + 2] = rgb[2]; // Blue
-          data[pos + 3] = 255; // Alpha (opacity)
-        }
-      }
-    }
-
-    if (ctx && imageData) {
-      ctx.putImageData(imageData, 0, 0);
-      return {
-        imageUrl: canvas.toDataURL(),
-        height,
-        width,
-        isExpanded: false,
-      };
-    }
-
-    return {
-      imageUrl: "",
-      height: 0,
-      width: 0,
-      isExpanded: false,
-    };
-  };
-
   const handleImageGenResponseJson = (json: ResponseItem) => {
     try {
       if (json.updateType === "init") {
         setImageGenResponse(json);
       } else if (json.updateType === "preview") {
         setImageGenResponse(json);
-        if (json.image) {
+        if (json.imageData) {
           try {
-            // console.log("set image preview for json: ", json)
-            const image = getCanvasDataUrl(json.image);
-            setImagePreview(image);
+            setImagePreview({
+              ...json.imageData,
+              isExpanded: false,
+            });
           } catch (e) {
             console.log("Error displaying image: ", e);
           }
         }
       } else if (json.updateType === "results") {
-        if (json.product) {
+        if (json.imageData) {
           try {
-            // console.log("set images for json: ", json)
             performance.mark("set-images-start");
-            const image = getCanvasDataUrl(json.product);
-            setImages((images) => [...images, image]);
+            const image = { ...json.imageData, isExpanded: false };
+            setImages((images) => [image, ...images]);
             performance.mark("set-images-end");
             performance.measure(
               "set-images-time",
               "set-images-start",
               "set-images-end",
             );
+            setImagePreview({
+              imageUrl: "",
+              height: 0,
+              width: 0,
+              isExpanded: false,
+            });
           } catch (e) {
             console.log("Error displaying image: ", e);
           }
         }
+        // TODO: when job is canceled this will end up pushing the last image to the image array again
       } else if (json.updateType == "finished") {
-        if (json.products && json.products.length) {
-          json.products.forEach((product) => {
+        if (json.imagesData && json.imagesData.length) {
+          json.imagesData.forEach((imageData) => {
             try {
-              // console.log("set images for json: ", json)
               performance.mark("set-images-start");
-              const image = getCanvasDataUrl(product);
-              setImages((images) => [...images, image]);
+              const image = { ...imageData, isExpanded: false };
+              setImages((images) => [image, ...images]);
               performance.mark("set-images-end");
               performance.measure(
                 "set-images-time",
                 "set-images-start",
                 "set-images-end",
               );
+              setImagePreview({
+                imageUrl: "",
+                height: 0,
+                width: 0,
+                isExpanded: false,
+              });
             } catch (e) {
               console.log("Error displaying image: ", e);
             }
@@ -276,7 +258,6 @@ const ImageGen: Component<{}> = (props) => {
     }
   };
 
-  //TODO: seems to fail with 1 image
   const genImage = async ({
     prompt,
     negativePrompt,
@@ -384,7 +365,7 @@ const ImageGen: Component<{}> = (props) => {
           buffer = "";
         } catch (e) {
           // The JSON is not complete, so wait for more chunks
-          console.log("Incomplete JSON, waiting for more data...");
+          // console.log("Incomplete JSON, waiting for more data...");
           try {
             if (buffer.includes("\n\n")) {
               const splitBuffer = buffer.split("\n\n");
@@ -463,6 +444,7 @@ const ImageGen: Component<{}> = (props) => {
                   onChange={(e) => setModel(e[0].value)}
                   label="Choose a model:"
                   defaultSelected={model()}
+                  enableItemToolTips
                 />
               </>
             )}
@@ -482,6 +464,7 @@ const ImageGen: Component<{}> = (props) => {
                   onChange={(e) => setRefinerModel(e[0].value)}
                   label="Choose a refiner model:"
                   defaultSelected={refinerModel()}
+                  enableItemToolTips
                 />
               </>
             )}
@@ -638,7 +621,6 @@ const ImageGen: Component<{}> = (props) => {
                         <Input
                           value={item.weight}
                           onChange={(e) => {
-                            //@ts-ignore
                             setSelectedLoras((selected) => {
                               selected[index()] = {
                                 model: selected[index()].model,
@@ -789,52 +771,76 @@ const ImageGen: Component<{}> = (props) => {
             class="mt-41 pl-1 pr-2 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-zinc-800 scrollbar-track-zinc-600"
             style={{ height: "calc(100vh - 162px)" }}
           >
-            {isEnablePreviewImages() && isGenerating() && (
-              <div>
-                <img
+            <div class="flex flex-row flex-wrap">
+              {isEnablePreviewImages() && isGenerating() && (
+                <div
                   class="m-1"
-                  src={imagePreview().imageUrl}
-                  alt="Preview"
-                  height={imagePreview().height}
-                  width={imagePreview().width}
-                />
-              </div>
-            )}
-            <div>
-              {images().map((image, index) => {
-                const heightRatio = image.width / IMAGE_DISPLAY_SIZE.width;
-                const widthRatio = image.height / IMAGE_DISPLAY_SIZE.height;
-                let adjust =
-                  heightRatio >= widthRatio ? heightRatio : widthRatio;
-                // TODO: think more about this
-                return (
+                  style={`max-height: ${imagePreview().height}px; max-width: ${
+                    imagePreview().width
+                  }px`}
+                >
                   <img
-                    class="m-1"
-                    src={image.imageUrl}
-                    alt={`Image ${index}`}
-                    height={
-                      image.isExpanded ? image.height : image.height / adjust
-                    }
-                    width={
-                      image.isExpanded ? image.width : image.width / adjust
-                    }
-                    onClick={(e) => {
-                      const targetImage = e.target as HTMLImageElement;
-                      if (image.isExpanded) {
-                        targetImage.height = image.height / adjust;
-                        targetImage.width = image.width / adjust;
-                        image.isExpanded = false;
-                      } else {
-                        targetImage.height = image.height;
-                        targetImage.width = image.width;
-                        image.isExpanded = true;
-                      }
-                    }}
+                    class="object-contain flex-shrink-0"
+                    src={imagePreview().imageUrl}
+                    alt="Preview"
+                    height={imagePreview().height}
+                    width={imagePreview().width}
                   />
-                );
-              })}
+                </div>
+              )}
+              <For each={images()} fallback={"Images generating"}>
+                {(image, index) => {
+                  const heightRatio = image.width / IMAGE_DISPLAY_SIZE.width;
+                  const widthRatio = image.height / IMAGE_DISPLAY_SIZE.height;
+                  let adjust =
+                    heightRatio >= widthRatio ? heightRatio : widthRatio;
+
+                  const height = image.isExpanded
+                    ? image.height
+                    : image.height / adjust;
+                  const width = image.isExpanded
+                    ? image.width
+                    : image.width / adjust;
+                  return (
+                    <div
+                      class="m-1"
+                      style={`max-height: ${
+                        image.isExpanded ? image.height : image.height / adjust
+                      }px; max-width: ${
+                        image.isExpanded ? image.width : image.width / adjust
+                      }px`}
+                      onClick={(e) => {
+                        const targetImage = e.target as HTMLImageElement;
+                        if (targetImage.parentElement) {
+                          const parent = targetImage.parentElement;
+                          if (image.isExpanded) {
+                            parent.style.maxHeight =
+                              (image.height / adjust).toString() + "px";
+                            parent.style.maxWidth =
+                              (image.width / adjust).toString() + "px";
+                            image.isExpanded = false;
+                          } else {
+                            parent.style.maxHeight =
+                              image.height.toString() + "px";
+                            parent.style.maxWidth =
+                              image.width.toString() + "px";
+                            image.isExpanded = true;
+                          }
+                        }
+                      }}
+                    >
+                      <img
+                        class="object-contain"
+                        src={image.imageUrl}
+                        alt={`Image ${index()}`}
+                        height={image.height}
+                        width={image.width}
+                      />
+                    </div>
+                  );
+                }}
+              </For>
             </div>
-            {/* <div class="flex justify-end"> */}
             <div class="fixed bottom-0 right-0 p-2">
               <div>
                 <Button
@@ -867,59 +873,3 @@ const ImageGen: Component<{}> = (props) => {
 };
 
 export default ImageGen;
-
-//if streaming proves to be too resource intensive this can be used to fetch just the final image
-// const genImage2 = async (body: string) => {
-//     try {
-//         console.log(body)
-//         const postJson = { "prompt":"1girl", "negativePrompt":"(embedding:unaestheticXLv31:0.8), low quality, watermark", "baseModelName":"capabilityXL_v20.safetensors", "imageSeed":"4891906240077778569", "imageNumber":1, "performanceSelection":"Quality", "styleSelections":["Fooocus V2", "Fooocus Masterpiece", "SAI Anime"], "aspectRatiosSelection":"1152×896" }
-//         const response = await fetch(
-//             `http://localhost:5000/image/gen/2`, ///image/gen
-//             {
-//                 method: 'POST',
-//                 headers: {
-//                     'Content-Type': 'application/json'
-//                 },
-//                 body: JSON.stringify(postJson)
-//             }
-//         );
-
-//         console.log(response)
-//         const resJson = await response.json()
-//         console.log(resJson)
-//         console.log(resJson[0])
-
-//         const rgbArray = resJson[0]
-
-//         const height  = 896
-//         const width = 1152
-//         const canvas = document.createElement('canvas');
-//         const ctx = canvas.getContext('2d');
-//         canvas.width = width;
-//         canvas.height = height;
-//         let imageData = ctx?.createImageData(width, height);
-//         let data = imageData?.data;
-
-//         if (data) {
-//             for (let y = 0; y < height; y++) {
-//                 for (let x = 0; x < width; x++) {
-//                     const pos = (y * width + x) * 4;
-//                     const rgb = rgbArray[y][x];
-//                     data[pos] = rgb[0];     // Red
-//                     data[pos + 1] = rgb[1]; // Green
-//                     data[pos + 2] = rgb[2]; // Blue
-//                     data[pos + 3] = 255;    // Alpha (opacity)
-//                 }
-//             }
-//         }
-
-//         if (ctx && imageData) {
-//             ctx.putImageData(imageData, 0, 0);
-//         setImage(canvas.toDataURL());
-//         }
-
-//     } catch (error) {
-//         console.log("error: ", error)
-//     }
-
-// }
